@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "Alert": {
+      "title": "Alert",
+      "description": "An alert posted on the college notice board.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Auto-generated alert ID." },
+        "title": { "type": "string", "description": "Title of the alert." },
+        "description": { "type": "string", "description": "Description of the alert." },
+        "category": { "type": "string", "description": "Category (e.g. LOST_ITEM, GENERAL)." },
+        "severity": { "type": "string", "enum": ["URGENT", "FYI", "INFORMATIONAL"] },
+        "postedBy": { "type": "string", "description": "User ID of the poster." },
+        "postedByName": { "type": "string", "description": "Display name or Anonymous_XXXX." },
+        "campusId": { "type": "string", "description": "Campus ID to scope alerts." },
+        "timestamp": { "type": "object", "description": "Creation timestamp." },
+        "expiresAt": { "type": "object", "description": "Expiration timestamp (nullable)." },
+        "latitude": { "type": "number", "description": "Latitude coordinate." },
+        "longitude": { "type": "number", "description": "Longitude coordinate." },
+        "locationAddress": { "type": "string", "description": "Location address." },
+        "mediaUrls": { "type": "array", "items": { "type": "string" }, "description": "URLs to uploaded media." },
+        "mediaTypes": { "type": "array", "items": { "type": "string" }, "description": "Types (image/video)." },
+        "upvoteCount": { "type": "number", "description": "Number of upvotes." },
+        "replyCount": { "type": "number", "description": "Number of replies." },
+        "isExpired": { "type": "boolean", "description": "Whether the alert has expired." }
+      },
+      "required": ["title", "description", "category", "severity", "postedBy", "postedByName", "timestamp", "upvoteCount", "replyCount", "isExpired"]
+    },
+    "Reply": {
+      "title": "Reply",
+      "description": "A reply to an alert.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "postedBy": { "type": "string" },
+        "postedByName": { "type": "string" },
+        "timestamp": { "type": "object" },
+        "upvotes": { "type": "number" }
+      },
+      "required": ["text", "postedBy", "postedByName", "timestamp", "upvotes"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user profile.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "isAnonymous": { "type": "boolean" },
+        "campusName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "fcmToken": { "type": "string" },
+        "notifCategories": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["uid", "isAnonymous"]
+    },
+    "Upvote": {
+      "title": "Upvote",
+      "description": "Records an upvote to prevent multiple votes.",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "object" }
+      },
+      "required": ["timestamp"]
+    }
+  },
+  "firestore": {
+    "alerts": {
+      "description": "Top-level collection of all alerts.",
+      "schema": { "$ref": "#/entities/Alert" }
+    },
+    "alerts/{alertId}/replies": {
+      "description": "Subcollection of replies on an alert.",
+      "schema": { "$ref": "#/entities/Reply" }
+    },
+    "alerts/{alertId}/upvotes": {
+      "description": "Subcollection for tracking users who upvoted.",
+      "schema": { "$ref": "#/entities/Upvote" }
+    },
+    "users": {
+      "description": "User profiles.",
+      "schema": { "$ref": "#/entities/User" }
+    }
+  }
+}

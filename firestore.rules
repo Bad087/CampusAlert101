@@ -1,0 +1,162 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+// Collection: users
+// Document ID: {userId}
+// Fields: uid, displayName, email, isAnonymous, campusName, avatarUrl, fcmToken, notifCategories
+//
+// Collection: alerts
+// Document ID: {alertId}
+// Fields: title, description, category, severity, postedBy, postedByName, campusId, timestamp, expiresAt, latitude, longitude, locationAddress, mediaUrls, mediaTypes, upvoteCount, replyCount, isExpired
+//
+// Collection: alerts/{alertId}/replies
+// Document ID: {replyId}
+// Fields: text, postedBy, postedByName, timestamp, upvotes
+//
+// Collection: alerts/{alertId}/upvotes
+// Document ID: {userId}
+// Fields: timestamp
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Core Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Validation
+    function validString(field, minLen, maxLen) {
+      return field is string && field.size() >= minLen && field.size() <= maxLen;
+    }
+
+    match /classrooms/{classroomId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() 
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.members[0] == request.auth.uid;
+        
+      allow update: if isAuthenticated() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+        || resource.data.ownerId == request.auth.uid
+      );
+      
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+
+      match /posts/{postId} {
+        function isClassroomMember() {
+          let classroom = get(/databases/$(database)/documents/classrooms/$(classroomId));
+          return classroom != null && request.auth.uid in classroom.data.members;
+        }
+
+        // Members of the classroom can read posts
+        allow read: if isAuthenticated() && isClassroomMember();
+        
+        // Members can create posts
+        allow create: if isAuthenticated() 
+          && isClassroomMember()
+          && request.resource.data.authorId == request.auth.uid;
+          
+        allow update: if isAuthenticated() && isClassroomMember() && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'replyCount', 'poll'])
+          || resource.data.authorId == request.auth.uid
+        );
+          
+        allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+
+        match /replies/{replyId} {
+          allow read: if isAuthenticated() && isClassroomMember();
+          allow create: if isAuthenticated() 
+            && isClassroomMember()
+            && request.resource.data.authorId == request.auth.uid;
+          allow update: if isAuthenticated() && isClassroomMember() && (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'poll'])
+            || resource.data.authorId == request.auth.uid
+          );
+          allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+        }
+      }
+    }
+
+    match /chats/{chatId} {
+      // For create: no existing resource data
+      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.participants;
+      
+      // For read/update/delete: resource data exists
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastUpdatedAt']);
+      allow delete: if isAuthenticated() && request.auth.uid in resource.data.participants;
+
+      match /messages/{messageId} {
+        function isChatParticipant() {
+          let chat = get(/databases/$(database)/documents/chats/$(chatId));
+          return chat != null && request.auth.uid in chat.data.participants;
+        }
+        allow read: if isAuthenticated() && isChatParticipant();
+        allow create: if isAuthenticated() 
+          && isChatParticipant()
+          && request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.keys().hasAll(['uid', 'isAnonymous']);
+      allow update: if isOwner(userId) && request.resource.data.uid == resource.data.uid;
+      allow delete: if false; // Users shouldn't be fully deleted from DB without proper cleanup
+    }
+
+    match /alerts/{alertId} {
+      // Any authenticated user can read alerts
+      allow read: if isAuthenticated();
+      
+      // Creating an alert:
+      allow create: if isAuthenticated() 
+        && request.resource.data.postedBy == request.auth.uid
+        && validString(request.resource.data.title, 1, 80)
+        && validString(request.resource.data.description, 1, 500)
+        && request.resource.data.upvoteCount == 0
+        && request.resource.data.replyCount == 0;
+        
+      // Updating an alert: (Only for upvoteCount, replyCount, or if owner)
+      // Allow owners to update everything EXCEPT upvote/reply counts directly (handled via increments ideally)
+      allow update: if isAuthenticated() && (
+        // Allow anyone to update upvote/reply count via increment or expiration (simplified)
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvoteCount', 'replyCount', 'isExpired'])) 
+        // Or owner can update core fields
+        || (resource.data.postedBy == request.auth.uid && request.resource.data.postedBy == resource.data.postedBy)
+      );
+
+      allow delete: if isAuthenticated() && resource.data.postedBy == request.auth.uid;
+
+      match /replies/{replyId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() 
+          && request.resource.data.postedBy == request.auth.uid
+          && validString(request.resource.data.text, 1, 500);
+        allow update: if isAuthenticated() && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes'])
+        );
+        allow delete: if isAuthenticated() && resource.data.postedBy == request.auth.uid;
+      }
+
+      match /upvotes/{userId} {
+        allow read: if isAuthenticated();
+        // A user can create/delete their own upvote document
+        allow create: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}
