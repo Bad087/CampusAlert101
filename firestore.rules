@@ -58,7 +58,7 @@ service cloud.firestore {
         }
 
         // Members of the classroom can read posts
-        allow read: if isAuthenticated() && isClassroomMember();
+        allow read: if isAuthenticated();
         
         // Members can create posts
         allow create: if isAuthenticated() 
@@ -73,7 +73,7 @@ service cloud.firestore {
         allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
 
         match /replies/{replyId} {
-          allow read: if isAuthenticated() && isClassroomMember();
+          allow read: if isAuthenticated();
           allow create: if isAuthenticated() 
             && isClassroomMember()
             && request.resource.data.authorId == request.auth.uid;
@@ -94,7 +94,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
       
       allow update: if isAuthenticated() && request.auth.uid in resource.data.participants
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastUpdatedAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastUpdatedAt', 'lastMsgSenderId', 'participantNames']);
       allow delete: if isAuthenticated() && request.auth.uid in resource.data.participants;
 
       match /messages/{messageId} {
@@ -112,8 +112,8 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId) && request.resource.data.keys().hasAll(['uid', 'isAnonymous']);
-      allow update: if isOwner(userId) && request.resource.data.uid == resource.data.uid;
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken']));
       allow delete: if false; // Users shouldn't be fully deleted from DB without proper cleanup
     }
 

@@ -109,7 +109,7 @@ function AppRoutes() {
                    new Notification(`🚨 New Campus Alert`, { body: data.title });
                 }
 
-                setTimeout(() => setNewAlert(null), 5000);
+                setTimeout(() => setNewAlert(null), 3000);
              }
           }
         }
@@ -142,7 +142,7 @@ function AppRoutes() {
                  if ('Notification' in window && Notification.permission === 'granted') {
                    new Notification(`💬 New Message from ${otherUser}`, { body: data.lastMessage });
                  }
-                 setTimeout(() => setNewAlert(null), 5000);
+                 setTimeout(() => setNewAlert(null), 3000);
               }
            }
         }

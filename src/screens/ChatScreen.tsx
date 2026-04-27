@@ -215,7 +215,7 @@ export default function ChatScreen() {
                </motion.div>
             )}
          </AnimatePresence>
-         <form onSubmit={handleSend} className="flex gap-2 max-w-3xl mx-auto items-center justify-between">
+         <form onSubmit={handleSend} className="flex gap-2 max-w-3xl mx-auto items-center w-full">
             <button
                type="button"
                onClick={() => setShowEmoji(!showEmoji)}
@@ -228,11 +228,11 @@ export default function ChatScreen() {
                value={text}
                onChange={e => setText(e.target.value)}
                placeholder="Chat Message..."
-               className="flex-1 bg-white/5 hover:bg-white/10 text-white rounded-full px-5 py-3 outline-none border border-white/5 focus:border-[#7C3AED] transition-all shadow-inner focus:shadow-[0_0_20px_rgba(124,58,237,0.2)] text-[15px]" 
+               className="flex-1 min-w-0 bg-white/5 hover:bg-white/10 text-white rounded-full px-5 py-3 outline-none border border-white/5 focus:border-[#7C3AED] transition-all shadow-inner focus:shadow-[0_0_20px_rgba(124,58,237,0.2)] text-[15px]" 
                onFocus={() => setShowEmoji(false)}
                autoComplete="off"
             />
-            <button disabled={!text.trim()} className="w-[44px] h-[44px] bg-gradient-to-r from-[#7C3AED] to-[#06B6D4] text-white rounded-full flex items-center justify-center disabled:opacity-30 disabled:saturate-0 hover:shadow-[0_0_15px_rgba(124,58,237,0.5)] active:scale-95 transition-all">
+            <button disabled={!text.trim()} className="w-[44px] h-[44px] shrink-0 bg-gradient-to-r from-[#7C3AED] to-[#06B6D4] text-white rounded-full flex items-center justify-center disabled:opacity-30 disabled:saturate-0 hover:shadow-[0_0_15px_rgba(124,58,237,0.5)] active:scale-95 transition-all">
               <Send size={18} className="translate-x-[1px]" />
             </button>
          </form>
