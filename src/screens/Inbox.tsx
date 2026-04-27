@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, orderBy, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, doc, deleteDoc, getDocs, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { MessageCircle, Search, Trash2, Edit } from 'lucide-react';
+import { MessageCircle, Search, Trash2, Edit, X, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Inbox() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showDirectory, setShowDirectory] = useState(false);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -28,6 +31,32 @@ export default function Inbox() {
     return () => unSub();
   }, [user]);
 
+  // Load campus users when directory is opened
+  useEffect(() => {
+    if (showDirectory && allUsers.length === 0) {
+       setLoadingUsers(true);
+       // Fetch some users, ideally we'd filter by campusName if scaled
+       const fetchUsers = async () => {
+         try {
+           const q = query(collection(db, 'users'), limit(50));
+           const snap = await getDocs(q);
+           const users: any[] = [];
+           snap.forEach(doc => {
+             if (doc.id !== user?.uid) {
+                users.push({ id: doc.id, ...doc.data() });
+             }
+           });
+           setAllUsers(users);
+         } catch(e) {
+           console.error(e);
+         } finally {
+           setLoadingUsers(false);
+         }
+       };
+       fetchUsers();
+    }
+  }, [showDirectory, user]);
+
   const handleDeleteChat = async (e: React.MouseEvent, chatId: string) => {
      e.stopPropagation();
      if(window.confirm('Are you sure you want to delete this chat?')) {
@@ -37,6 +66,11 @@ export default function Inbox() {
            console.error('Error deleting chat:', err);
         }
      }
+  };
+
+  const startDirectMessage = (targetUserId: string, targetUserName: string) => {
+     setShowDirectory(false);
+     navigate(`/chat/new_${targetUserId}?name=${encodeURIComponent(targetUserName)}`);
   };
 
   return (
@@ -65,7 +99,7 @@ export default function Inbox() {
              <motion.button 
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => navigate('/search')} 
+                onClick={() => setShowDirectory(true)} 
                 className="bg-gradient-to-r from-[var(--color-brand-accent-purple)] to-[var(--color-brand-accent-cyan)] px-6 py-2.5 rounded-full text-white font-bold tracking-wide shadow-[0_0_20px_rgba(124,58,237,0.3)] flex items-center"
              >
                 <Edit size={16} className="mr-2" /> Start Chat
@@ -118,11 +152,69 @@ export default function Inbox() {
       <motion.button 
          whileHover={{ scale: 1.05, rotate: 15 }}
          whileTap={{ scale: 0.9 }}
-         onClick={() => navigate('/search')}
+         onClick={() => setShowDirectory(true)}
          className="fixed bottom-24 right-4 w-14 h-14 bg-gradient-to-tr from-[var(--color-brand-accent-purple)] to-[var(--color-brand-accent-cyan)] shadow-[0_4px_20px_rgba(124,58,237,0.4)] rounded-full text-white flex items-center justify-center z-50 transition-all border border-white/10"
+         title="New Message"
       >
          <Edit size={24} className="ml-1" />
       </motion.button>
+
+      {/* Directory Modal for New Chats */}
+      <AnimatePresence>
+        {showDirectory && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
+             onClick={() => setShowDirectory(false)}
+          >
+             <motion.div 
+               initial={{ y: "100%" }}
+               animate={{ y: 0 }}
+               exit={{ y: "100%" }}
+               transition={{ type: "spring", damping: 25, stiffness: 300 }}
+               onClick={e => e.stopPropagation()}
+               className="w-full bg-[var(--color-brand-bg-primary)] rounded-t-3xl sm:rounded-3xl h-[80vh] sm:h-[60vh] max-w-lg flex flex-col shadow-[0_-20px_50px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden"
+             >
+                <div className="p-4 border-b border-[var(--color-brand-divider)] flex justify-between items-center bg-[var(--color-brand-bg-card)]">
+                   <h3 className="text-lg font-bold text-white">Campus Directory</h3>
+                   <button onClick={() => setShowDirectory(false)} className="p-2 bg-[var(--color-brand-bg-surface)] rounded-full text-gray-400 hover:text-white transition-colors">
+                      <X size={18} />
+                   </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                   {loadingUsers ? (
+                     <div className="text-center text-[var(--color-brand-text-secondary)] mt-10 animate-pulse">Loading directory...</div>
+                   ) : allUsers.length > 0 ? (
+                     allUsers.map(u => (
+                        <div 
+                          key={u.id}
+                          onClick={() => startDirectMessage(u.id, u.displayName || 'Unknown User')}
+                          className="flex items-center p-3 bg-[var(--color-brand-bg-card)] rounded-2xl cursor-pointer hover:bg-white/5 transition-colors border border-white/5"
+                        >
+                           <div className="w-12 h-12 bg-gradient-to-tr from-[var(--color-brand-accent-purple)] to-[var(--color-brand-accent-cyan)] rounded-full flex items-center justify-center text-white mr-4 shadow-inner">
+                              {u.avatarUrl ? (
+                                <img src={u.avatarUrl} alt="avatar" className="w-full h-full rounded-full object-cover" />
+                              ) : (
+                                <UserIcon size={20} />
+                              )}
+                           </div>
+                           <div className="flex-1">
+                              <h4 className="text-white font-semibold">{u.displayName || 'Unknown User'}</h4>
+                              <p className="text-[var(--color-brand-text-secondary)] text-sm capitalize">{u.campusName || 'General User'}</p>
+                           </div>
+                        </div>
+                     ))
+                   ) : (
+                     <div className="text-center text-[var(--color-brand-text-secondary)] mt-10">No other users found right now.</div>
+                   )}
+                </div>
+             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

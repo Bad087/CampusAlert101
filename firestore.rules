@@ -111,7 +111,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isAuthenticated();
       allow create: if isOwner(userId) && request.resource.data.keys().hasAll(['uid', 'isAnonymous']);
       allow update: if isOwner(userId) && request.resource.data.uid == resource.data.uid;
       allow delete: if false; // Users shouldn't be fully deleted from DB without proper cleanup

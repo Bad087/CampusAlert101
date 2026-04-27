@@ -134,8 +134,8 @@ export default function AlertCard({ alert: alertData, index = 0 }: { alert: Aler
                       </>
                     )}
                     {user?.uid !== alertData.postedBy && (
-                      <button onClick={(e) => { e.stopPropagation(); setShowMenu(false); window.alert("Reported to moderators."); }} className="w-full text-left px-4 py-2.5 hover:bg-[var(--color-brand-bg-primary)] transition-colors text-red-500 flex items-center">
-                        <Flag size={14} className="mr-2 opacity-70" /> Report
+                      <button onClick={(e) => { e.stopPropagation(); setShowMenu(false); navigate(`/chat/new_${alertData.postedBy}?name=${encodeURIComponent(alertData.postedByName)}`); }} className="w-full text-left px-4 py-2.5 hover:bg-[var(--color-brand-bg-primary)] transition-colors text-[var(--color-brand-accent-cyan)] flex items-center font-medium">
+                        <MessageSquare size={14} className="mr-2 opacity-70" /> Message Poster
                       </button>
                     )}
                   </motion.div>

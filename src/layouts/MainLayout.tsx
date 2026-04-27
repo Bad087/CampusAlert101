@@ -1,10 +1,46 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { Home, User, PlusCircle, MessageCircle, Library } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '../contexts/AuthContext';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
 
 export default function MainLayout() {
   const location = useLocation();
+  const { user } = useAuth();
+  const [hasUnreadChats, setHasUnreadChats] = useState(false);
+
+  // Mark inbox as read when visiting
+  useEffect(() => {
+    if (location.pathname === '/app/inbox') {
+      localStorage.setItem('lastInboxVisit', Date.now().toString());
+      setHasUnreadChats(false);
+    }
+  }, [location.pathname]);
+
+  // Listen to chats to show badge
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      let isUnread = false;
+      const lastVisit = parseInt(localStorage.getItem('lastInboxVisit') || '0', 10);
+      
+      snap.forEach(doc => {
+        const data = doc.data();
+        if (data.lastUpdatedAt && data.lastUpdatedAt.toMillis() > lastVisit) {
+          isUnread = true;
+        }
+      });
+      
+      if (location.pathname !== '/app/inbox') {
+        setHasUnreadChats(isUnread);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [user, location.pathname]);
 
   return (
     <div className="min-h-screen bg-[var(--color-brand-bg-primary)] flex flex-col relative overflow-hidden">
@@ -54,10 +90,15 @@ export default function MainLayout() {
           </div>
         </NavLink>
 
-        <NavLink to="/app/inbox" className={({ isActive }) => `flex flex-col items-center justify-center w-14 h-12 transition-colors ${isActive ? 'text-[var(--color-brand-accent-purple)]' : 'text-gray-400 hover:text-white'}`}>
+        <NavLink to="/app/inbox" className={({ isActive }) => `relative flex flex-col items-center justify-center w-14 h-12 transition-colors ${isActive ? 'text-[var(--color-brand-accent-purple)]' : 'text-gray-400 hover:text-white'}`}>
           {({ isActive }) => (
             <>
-              <MessageCircle size={22} className="mb-1" strokeWidth={isActive ? 2.5 : 2} />
+              <div className="relative">
+                <MessageCircle size={22} className="mb-1" strokeWidth={isActive ? 2.5 : 2} />
+                {hasUnreadChats && !isActive && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#0F0F0F]"></span>
+                )}
+              </div>
               <span className="text-[10px] font-medium leading-none">Inbox</span>
             </>
           )}

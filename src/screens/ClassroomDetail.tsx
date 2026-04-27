@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
+import { playNotificationSound } from '../App';
 
 const EMOJIS = ['👍', '❤️', '😂', '🔥', '🚀', '👀', '💯'];
 
@@ -252,6 +253,44 @@ export default function ClassroomDetail() {
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState(['', '']);
 
+  // Roster fetching
+  const [roster, setRoster] = useState<any[]>([]);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  
+  const initTimeRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!classroom?.members?.length) {
+      setRoster([]);
+      return;
+    }
+    const fetchRoster = async () => {
+      setLoadingRoster(true);
+      try {
+         // Query all users and filter by members. (In prod, use a 'in' query in batches)
+         const { getDocs, limit, where } = await import('firebase/firestore');
+         // We can do an 'in' query for up to 30 items
+         const batchSize = 30;
+         let allUsers: any[] = [];
+         
+         const memberIds = [...classroom.members];
+         for (let i = 0; i < memberIds.length; i += batchSize) {
+            const batch = memberIds.slice(i, i + batchSize);
+            const q = query(collection(db, 'users'), where('uid', 'in', batch));
+            const snap = await getDocs(q);
+            snap.forEach(d => allUsers.push({ id: d.id, ...d.data() }));
+         }
+         
+         setRoster(allUsers);
+      } catch (e) {
+         console.warn("Could not fetch roster", e);
+      } finally {
+         setLoadingRoster(false);
+      }
+    };
+    fetchRoster();
+  }, [classroom?.members]);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -262,6 +301,20 @@ export default function ClassroomDetail() {
     
     const postsQuery = query(collection(db, `classrooms/${id}/posts`), orderBy('createdAt', 'desc'));
     const unSubPosts = onSnapshot(postsQuery, snap => {
+      snap.docChanges().forEach(change => {
+         if (change.type === 'added') {
+            const data = change.doc.data();
+            if (data.createdAt && data.createdAt.toMillis() > initTimeRef.current) {
+               if (data.authorId !== user?.uid) {
+                  playNotificationSound();
+                  
+                  if ('Notification' in window && Notification.permission === 'granted') {
+                     new Notification(`New Post in ${classroom?.name || 'Classroom'}`, { body: data.text });
+                  }
+               }
+            }
+         }
+      });
       const p: any[] = [];
       snap.forEach(d => p.push({ id: d.id, ...d.data() }));
       setPosts(p);
@@ -283,12 +336,26 @@ export default function ClassroomDetail() {
     if (!activeThread || !id) return;
     const repQ = query(collection(db, `classrooms/${id}/posts/${activeThread.id}/replies`), orderBy('createdAt', 'asc'));
     const unSubR = onSnapshot(repQ, snap => {
+       snap.docChanges().forEach(change => {
+          if (change.type === 'added') {
+             const data = change.doc.data();
+             if (data.createdAt && data.createdAt.toMillis() > initTimeRef.current) {
+                if (data.authorId !== user?.uid) {
+                   playNotificationSound();
+                   
+                   if ('Notification' in window && Notification.permission === 'granted') {
+                      new Notification(`New Reply`, { body: data.text });
+                   }
+                }
+             }
+          }
+       });
        const r: any[] = [];
        snap.forEach(d => r.push({ id: d.id, ...d.data() }));
        setReplies(r);
     });
     return () => unSubR();
-  }, [activeThread, id]);
+  }, [activeThread, id, user?.uid]);
 
   const handlePost = async () => {
     const hasText = newPost.trim().length > 0;
@@ -435,13 +502,57 @@ export default function ClassroomDetail() {
                 <p className="text-gray-400 text-sm">Share this unique code to let others join your {classroom.type?.toLowerCase() || 'space'}.</p>
              </div>
              
-             <div className="bg-[#1A1A2E] rounded-[24px] p-6 border border-white/5">
-                 <h3 className="text-white font-semibold text-lg mb-4 flex items-center">
-                   <Users size={18} className="mr-2 text-[var(--color-brand-accent-purple)]" /> Roster
-                 </h3>
-                 <p className="text-gray-400 text-sm">
-                   {classroom.members?.length} active participants connected. Full directory access requires administrative verification.
-                 </p>
+             <div className="bg-[#1A1A2E] rounded-[24px] overflow-hidden border border-white/5">
+                 <div className="p-6 border-b border-white/5">
+                   <h3 className="text-white font-semibold text-lg flex items-center mb-1">
+                     <Users size={18} className="mr-2 text-[var(--color-brand-accent-purple)]" /> Roster
+                   </h3>
+                   <p className="text-gray-400 text-sm">
+                     {classroom.members?.length} active participants in this space.
+                   </p>
+                 </div>
+                 
+                 <div className="divide-y divide-white/5 max-h-[300px] overflow-y-auto w-full group">
+                   {loadingRoster ? (
+                     <div className="p-6 text-center text-gray-500 animate-pulse text-sm">Gathering roster...</div>
+                   ) : roster.length > 0 ? (
+                      roster.map(member => {
+                         const isMe = member.id === user?.uid;
+                         return (
+                           <div key={member.id} className="flex items-center justify-between p-4 hover:bg-white/[0.02] transition-colors">
+                              <div className="flex items-center gap-3">
+                                 {member.avatarUrl ? (
+                                   <img src={member.avatarUrl} alt="Avatar" className="w-10 h-10 rounded-full object-cover shadow-sm bg-black/20" />
+                                 ) : (
+                                   <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[var(--color-brand-accent-purple)] to-[var(--color-brand-accent-cyan)] flex items-center justify-center text-white font-bold text-sm shadow-inner">
+                                      {(member.displayName || member.email || 'U').substring(0,2).toUpperCase()}
+                                   </div>
+                                 )}
+                                 <div>
+                                    <div className="text-sm font-semibold text-white flex items-center gap-2">
+                                      {member.displayName || member.email || 'Anonymous Member'}
+                                      {isMe && <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-gray-400 uppercase tracking-wider font-bold">You</span>}
+                                    </div>
+                                    {member.campusName && <div className="text-[11px] text-gray-500 capitalize">{member.campusName} Campus</div>}
+                                 </div>
+                              </div>
+                              
+                              {!isMe && (
+                                <button 
+                                  onClick={() => navigate(`/chat/new_${member.id}?name=${encodeURIComponent(member.displayName || 'Member')}`)}
+                                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-[var(--color-brand-accent-purple)]/20 hover:text-[var(--color-brand-accent-cyan)] text-gray-400 flex items-center justify-center transition-colors shrink-0"
+                                  title="Send Message"
+                                >
+                                  <MessageSquare size={14} />
+                                </button>
+                              )}
+                           </div>
+                         )
+                      })
+                   ) : (
+                      <div className="p-6 text-center text-sm text-gray-500">Only you are here.</div>
+                   )}
+                 </div>
              </div>
            </div>
          )}
