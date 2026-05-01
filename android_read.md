@@ -50,11 +50,11 @@ graph TD
     classDef data fill:#ff88001a,stroke:#ff8800,stroke-width:2px;
     classDef external fill:#2e1065,stroke:#a855f7,stroke-width:2px;
 
-    subgraph UILayer [UI Layer (Main Thread)]
+    subgraph "UI Layer (Main Thread)"
         UI([Fragments / Compose UI]):::ui
     end
 
-    subgraph DomainLayer [Presentation Logic]
+    subgraph "Presentation Logic"
         VM([ViewModels]):::logic
         StateFlow([StateFlow / SharedFlow]):::logic
         VM --> StateFlow
@@ -62,7 +62,7 @@ graph TD
         UI -.->|User Intents| VM
     end
 
-    subgraph DataLayer [Data Layer (IO Dispatcher)]
+    subgraph "Data Layer (IO Dispatcher)"
         Repo([Repositories]):::data
         LocalDB[(Room SQLite Cache)]:::data
         RemoteDS([Firestore Data Source]):::data
